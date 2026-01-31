@@ -1,0 +1,584 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+
+typedef struct {
+    char username[30];
+    char password[30];
+    char role[10];     
+} User;
+
+
+typedef struct {
+    char DepartureTime[6];   
+    char ArrivalTime[6];   
+    char Destination[20];
+    float Price;
+    int tripNumber;
+} DATA;
+
+
+typedef struct {
+    int PNR;              
+    int tripNumber;
+    char DepartureTime[6];
+    char ArrivalTime[6];
+    char Date[11];      
+    char Destination[20];
+    float Price;
+} BOOKING;
+
+
+int MainMenu();
+int Login(User* UsersAry, int size);
+int AdminMenu();
+int UserMenu();
+void CheckFlightSchedule(DATA* FlightTrips, int size);
+int AddFlightTrip(DATA* FlightTrips, int size);
+int DeleteFlightTrip(DATA* FlightTrips, int size);
+void EditFlightTrip(DATA* FlightTrips, int size);
+void PrintMostExpensiveTrip(DATA* FlightTrips, int size);
+void FilterByArrivalTime(DATA* FlightTrips, int size);
+void UpdateFlightDataFile(DATA* FlightTrips, int size);
+int BookTicket(DATA* FlightTrips, int tripCount, int* PNR, BOOKING** bookings, int bookingCount);
+int CancelReservation(BOOKING** bookings, int bookingCount);
+void UpdateBookingFile(BOOKING* bookings, int size);
+
+int main() {
+    int option1, option2, option3;
+    int PNR = 1000; 
+
+    FILE* fptr1 = fopen("login.txt", "r");
+    if (fptr1 == NULL) {
+        printf("Error opening login.txt file\n");
+        exit(1);
+    }
+
+    int userCount = 0;
+    char line[200];
+    while (fgets(line, sizeof(line), fptr1)) {
+        if (line[0] != '\n' && line[0] != '\0')
+            userCount++;
+    }
+    fclose(fptr1);
+
+
+    User* UsersAry = (User*)malloc(userCount * sizeof(User));
+    if (UsersAry == NULL) {
+        printf("Memory allocation failed.\n");
+        exit(1);
+    }
+
+    fptr1 = fopen("login.txt", "r");
+    if (fptr1 == NULL) {
+        printf("Error opening login.txt file\n");
+        exit(1);
+    }
+
+    for (int i = 0; i < userCount; i++) {
+        
+        fscanf(fptr1, "%29s %29s %9s", UsersAry[i].username, UsersAry[i].password, UsersAry[i].role);
+    }
+    fclose(fptr1);
+
+   
+    FILE* fptr2 = fopen("data.txt", "r");
+    if (fptr2 == NULL) {
+        printf("Error opening data.txt file\n");
+        exit(1);
+    }
+
+    int FlightTripCount = 0;
+    while (fgets(line, sizeof(line), fptr2)) {
+        if (line[0] != '\n' && line[0] != '\0')
+            FlightTripCount++;
+    }
+    fclose(fptr2);
+
+   
+    DATA* FlightTrips = (DATA*)malloc(FlightTripCount * sizeof(DATA));
+    if (FlightTrips == NULL) {
+        printf("Memory allocation failed.\n");
+        free(UsersAry);
+        exit(1);
+    }
+
+    fptr2 = fopen("data.txt", "r");
+    if (fptr2 == NULL) {
+        printf("Error opening data.txt file\n");
+        free(UsersAry);
+        free(FlightTrips);
+        exit(1);
+    }
+
+    for (int i = 0; i < FlightTripCount; i++) {
+        fscanf(fptr2, "%5s %5s %19s %f %d",
+            FlightTrips[i].DepartureTime,
+            FlightTrips[i].ArrivalTime,
+            FlightTrips[i].Destination,
+            &FlightTrips[i].Price,
+            &FlightTrips[i].tripNumber);
+    }
+    fclose(fptr2);
+
+ 
+    int bookingCount = 0;
+    FILE* fptr3 = fopen("booking.txt", "r");
+    if (fptr3 == NULL) {
+        fptr3 = fopen("booking.txt", "w");
+        if (fptr3 == NULL) {
+            printf("Error creating booking.txt file\n");
+            free(UsersAry);
+            free(FlightTrips);
+            exit(1);
+        }
+        fclose(fptr3);
+        fptr3 = fopen("booking.txt", "r");
+    }
+
+    while (fgets(line, sizeof(line), fptr3)) {
+        if (line[0] != '\n' && line[0] != '\0')
+            bookingCount++;
+    }
+    fclose(fptr3);
+
+    BOOKING* bookings = NULL;
+    if (bookingCount == 0) {
+        bookings = (BOOKING*)malloc(sizeof(BOOKING)); 
+    }
+    else {
+        bookings = (BOOKING*)malloc(bookingCount * sizeof(BOOKING));
+    }
+
+    if (bookings == NULL) {
+        printf("Memory allocation failed.\n");
+        free(UsersAry);
+        free(FlightTrips);
+        exit(1);
+    }
+
+   
+    fptr3 = fopen("booking.txt", "r");
+    if (fptr3 != NULL) {
+   
+        for (int i = 0; i < bookingCount; i++) {
+            fscanf(fptr3, "%d %d %5s %5s %10s %19s %f",
+                &bookings[i].PNR,
+                &bookings[i].tripNumber,
+                bookings[i].DepartureTime,
+                bookings[i].ArrivalTime,
+                bookings[i].Date,
+                bookings[i].Destination,
+                &bookings[i].Price);
+            
+            if (bookings[i].PNR >= PNR) PNR = bookings[i].PNR + 1;
+        }
+        fclose(fptr3);
+    }
+
+    do {
+        option1 = MainMenu();
+        if (option1 == 1) {
+            int userIndex = Login(UsersAry, userCount);
+
+            if (userIndex == -1) {
+                printf("\nInvalid username or password\n");
+            }
+            else {
+                int isAdmin = (strcmp(UsersAry[userIndex].role, "admin") == 0);
+
+                if (isAdmin) {
+                    do {
+                        option2 = AdminMenu();
+
+                        switch (option2) {
+                        case 1:
+                            CheckFlightSchedule(FlightTrips, FlightTripCount);
+                            break;
+                        case 2:
+                            FlightTrips = (DATA*)realloc(FlightTrips, (FlightTripCount + 1) * sizeof(DATA));
+                            if (FlightTrips == NULL) {
+                                printf("Realloc failed.\n");
+                                exit(1);
+                            }
+                            FlightTripCount = AddFlightTrip(FlightTrips, FlightTripCount);
+                            break;
+                        case 3:
+                            FlightTripCount = DeleteFlightTrip(FlightTrips, FlightTripCount);
+                            break;
+                        case 4:
+                            EditFlightTrip(FlightTrips, FlightTripCount);
+                            break;
+                        case 5:
+                            PrintMostExpensiveTrip(FlightTrips, FlightTripCount);
+                            break;
+                        case 6:
+                            FilterByArrivalTime(FlightTrips, FlightTripCount);
+                            break;
+                        case 7:
+                            UpdateFlightDataFile(FlightTrips, FlightTripCount);
+                            break;
+                        case 8:
+                            printf("Exiting Admin Menu...\n");
+                            break;
+                        default:
+                            printf("invalid option\n");
+                        }
+                    } while (option2 != 8);
+                }
+                else {
+                    do {
+                        option3 = UserMenu();
+
+                        switch (option3) {
+                        case 1:
+                            CheckFlightSchedule(FlightTrips, FlightTripCount);
+                            break;
+                        case 2:
+                            bookingCount = BookTicket(FlightTrips, FlightTripCount, &PNR, &bookings, bookingCount);
+                            break;
+                        case 3:
+                            bookingCount = CancelReservation(&bookings, bookingCount);
+                            break;
+                        case 4:
+                            UpdateBookingFile(bookings, bookingCount);
+                            break;
+                        case 5:
+                            printf("Exiting User Menu...\n");
+                            break;
+                        default:
+                            printf("invalid option\n");
+                        }
+                    } while (option3 != 5);
+                }
+            }
+        }
+    } while (option1 != 2);
+
+    free(UsersAry);
+    free(FlightTrips);
+    free(bookings);
+
+    system("pause");
+    return 0;
+}
+
+int MainMenu() {
+    int option;
+    do {
+        printf("\nWelcome to Flight Reservation System!\n");
+        printf("1. Login\n");
+        printf("2. Exit\n");
+        scanf("%d", &option);
+
+        if (option < 1 || option > 2)
+            printf("\ninvalid option!\n");
+
+    } while (option < 1 || option > 2);
+    return option;
+}
+
+int Login(User* UsersAry, int size) {
+    char username[30];
+    char password[30];
+
+    printf("Please enter your username: ");
+    scanf("%29s", username);
+
+    printf("Please enter your password: ");
+    scanf("%29s", password);
+
+    for (int i = 0; i < size; i++) {
+        if (strcmp(UsersAry[i].username, username) == 0 &&
+            strcmp(UsersAry[i].password, password) == 0) {
+            return i; 
+        }
+    }
+    return -1;
+}
+
+int AdminMenu() {
+    int option;
+    do {
+        printf("\nWelcome!\n");
+        printf("Please select:\n");
+        printf("    1. Check Flight schedule\n");
+        printf("    2. Add new Flight trip\n");
+        printf("    3. Delete Flight trip\n");
+        printf("    4. Edit Flight trip\n");
+        printf("    5. Print Most Expensive Trip\n");
+        printf("    6. Filter by arrival time\n");
+        printf("    7. Update File\n");
+        printf("    8. Exit\n");
+        scanf("%d", &option);
+
+        if (option < 1 || option > 8)
+            printf("\nInvalid option!\n");
+
+    } while (option < 1 || option > 8);
+    return option;
+}
+
+int UserMenu() {
+    int option;
+    do {
+        printf("\nWelcome!\n");
+        printf("Please select:\n");
+        printf(" 1. List Flight trips.\n");
+        printf(" 2. Book tickets.\n");
+        printf(" 3. Cancel reservation.\n");
+        printf(" 4. Update File.\n");
+        printf(" 5. Exit.\n");
+        scanf("%d", &option);
+
+        if (option < 1 || option > 5)
+            printf("\ninvalid option!\n");
+
+    } while (option < 1 || option > 5);
+    return option;
+}
+
+void CheckFlightSchedule(DATA* FlightTrips, int size) {
+    printf("\t %-14s %-14s %-14s %-14s %-14s\n", "Departure Time", "Arrival Time", "Destination", "Price", "Flight Trip No");
+    printf("====================================================================================\n");
+    for (int i = 0; i < size; i++) {
+        printf("%d. \t %-14s %-14s %-14s %-14.2f %-14d\n", i,
+            FlightTrips[i].DepartureTime,
+            FlightTrips[i].ArrivalTime,
+            FlightTrips[i].Destination,
+            FlightTrips[i].Price,
+            FlightTrips[i].tripNumber);
+    }
+}
+
+int AddFlightTrip(DATA* FlightTrips, int size) {
+    printf("Enter departure time (HH:MM): ");
+    scanf("%5s", FlightTrips[size].DepartureTime);
+
+    printf("Enter arrival time (HH:MM): ");
+    scanf("%5s", FlightTrips[size].ArrivalTime);
+
+    printf("Enter destination: ");
+    scanf("%19s", FlightTrips[size].Destination);
+
+    printf("Enter price: ");
+    scanf("%f", &FlightTrips[size].Price);
+
+    printf("Enter trip number: ");
+    scanf("%d", &FlightTrips[size].tripNumber);
+
+    size++;
+    printf("\nNew Flight trip has been added\n");
+    return size;
+}
+
+int DeleteFlightTrip(DATA* FlightTrips, int size) {
+    int tripNumber;
+
+    printf("Enter the Flight trip number to delete: ");
+    scanf("%d", &tripNumber);
+
+    for (int i = 0; i < size; i++) {
+        if (FlightTrips[i].tripNumber == tripNumber) {
+            for (int j = i; j < size - 1; j++) {
+                FlightTrips[j] = FlightTrips[j + 1];
+            }
+            size--;
+      
+            printf("Flight trip %d has been deleted.\n", tripNumber);
+            return size;
+        }
+    }
+
+    printf("Trip not found.\n");
+    return size;
+}
+
+void EditFlightTrip(DATA* FlightTrips, int size) {
+    int tripNumber;
+
+    printf("Enter the Flight trip number to edit: ");
+    scanf("%d", &tripNumber);
+
+    for (int i = 0; i < size; i++) {
+        if (FlightTrips[i].tripNumber == tripNumber) {
+            printf("Enter new departure time (HH:MM): ");
+            scanf("%5s", FlightTrips[i].DepartureTime);
+
+            printf("Enter new arrival time (HH:MM): ");
+            scanf("%5s", FlightTrips[i].ArrivalTime);
+
+            printf("Enter new destination: ");
+            scanf("%19s", FlightTrips[i].Destination);
+
+            printf("Enter new price: ");
+            scanf("%f", &FlightTrips[i].Price);
+
+            printf("Flight trip %d has been edited.\n", tripNumber);
+            return;
+        }
+    }
+
+    printf("Trip not found.\n");
+}
+
+void PrintMostExpensiveTrip(DATA* FlightTrips, int size) {
+    if (size <= 0) {
+        printf("No trips available.\n");
+        return;
+    }
+
+    int maxIndex = 0;
+    for (int i = 1; i < size; i++) {
+        if (FlightTrips[i].Price > FlightTrips[maxIndex].Price)
+            maxIndex = i;
+    }
+
+    printf("Most Expensive Trip:\n");
+    printf("Departure: %s, Arrival: %s, Destination: %s, Price: %.2f, Trip No: %d\n",
+        FlightTrips[maxIndex].DepartureTime,
+        FlightTrips[maxIndex].ArrivalTime,
+        FlightTrips[maxIndex].Destination,
+        FlightTrips[maxIndex].Price,
+        FlightTrips[maxIndex].tripNumber);
+}
+
+void FilterByArrivalTime(DATA* FlightTrips, int size) {
+    char ArrivalTime1[6], ArrivalTime2[6];
+
+    printf("Enter two Arrival Times (HH:MM format): ");
+    scanf("%5s %5s", ArrivalTime1, ArrivalTime2);
+
+    printf("Trips between %s and %s:\n", ArrivalTime1, ArrivalTime2);
+    for (int i = 0; i < size; i++) {
+        if (strcmp(FlightTrips[i].ArrivalTime, ArrivalTime1) >= 0 &&
+            strcmp(FlightTrips[i].ArrivalTime, ArrivalTime2) <= 0) {
+            printf("Departure: %s, Arrival: %s, Destination: %s, Price: %.2f, Trip No: %d\n",
+                FlightTrips[i].DepartureTime,
+                FlightTrips[i].ArrivalTime,
+                FlightTrips[i].Destination,
+                FlightTrips[i].Price,
+                FlightTrips[i].tripNumber);
+        }
+    }
+}
+
+void UpdateFlightDataFile(DATA* FlightTrips, int size) {
+    FILE* fptr = fopen("data.txt", "w");
+    if (fptr == NULL) {
+        printf("Error opening file data.txt\n");
+        return;
+    }
+
+    for (int i = 0; i < size; i++) {
+        fprintf(fptr, "%s %s %s %.2f %d\n",
+            FlightTrips[i].DepartureTime,
+            FlightTrips[i].ArrivalTime,
+            FlightTrips[i].Destination,
+            FlightTrips[i].Price,
+            FlightTrips[i].tripNumber);
+    }
+
+    fclose(fptr);
+    printf("Flight data file has been updated.\n");
+}
+
+int BookTicket(DATA* FlightTrips, int tripCount, int* PNR, BOOKING** bookings, int bookingCount) {
+    int tripNumber;
+
+    printf("Available Flight Trips:\n");
+    CheckFlightSchedule(FlightTrips, tripCount);
+
+    printf("Enter the Flight trip number you want to book: ");
+    scanf("%d", &tripNumber);
+
+    for (int i = 0; i < tripCount; i++) {
+        if (FlightTrips[i].tripNumber == tripNumber) {
+
+            BOOKING* tmp = (BOOKING*)realloc(*bookings, (bookingCount + 1) * sizeof(BOOKING));
+            if (tmp == NULL) {
+                printf("Memory allocation failed.\n");
+                return bookingCount;
+            }
+            *bookings = tmp;
+
+            
+            char date[11];
+            printf("Enter travel date (YYYY-MM-DD): ");
+            scanf("%10s", date);
+
+            (*bookings)[bookingCount].tripNumber = FlightTrips[i].tripNumber;
+            strcpy((*bookings)[bookingCount].DepartureTime, FlightTrips[i].DepartureTime);
+            strcpy((*bookings)[bookingCount].ArrivalTime, FlightTrips[i].ArrivalTime);
+            strcpy((*bookings)[bookingCount].Date, date);
+            strcpy((*bookings)[bookingCount].Destination, FlightTrips[i].Destination);
+            (*bookings)[bookingCount].Price = FlightTrips[i].Price;
+            (*bookings)[bookingCount].PNR = (*PNR);
+
+            printf("Booking confirmed! Your PNR is %d\n", *PNR);
+
+            (*PNR)++;
+            if ((*PNR) >= 10000) (*PNR) = 1000;
+
+            bookingCount++;
+            UpdateBookingFile(*bookings, bookingCount);
+            return bookingCount;
+        }
+    }
+
+    printf("Trip number is not found.\n");
+    return bookingCount;
+}
+
+int CancelReservation(BOOKING** bookings, int bookingCount) {
+    int PNR;
+
+    printf("Enter the PNR of the booking you want to cancel: ");
+    scanf("%d", &PNR);
+
+    for (int i = 0; i < bookingCount; i++) {
+        if ((*bookings)[i].PNR == PNR) {
+
+            for (int j = i; j < bookingCount - 1; j++) {
+                (*bookings)[j] = (*bookings)[j + 1];
+            }
+
+            bookingCount--;
+
+            BOOKING* tmp = (BOOKING*)realloc(*bookings,
+                (bookingCount > 0 ? bookingCount : 1) * sizeof(BOOKING));
+            if (tmp != NULL) *bookings = tmp;
+
+            UpdateBookingFile(*bookings, bookingCount);
+            printf("Booking with PNR %d has been successfully canceled.\n", PNR);
+            return bookingCount;
+        }
+    }
+
+    printf("Booking with PNR %d is not found.\n", PNR);
+    return bookingCount;
+}
+
+void UpdateBookingFile(BOOKING* bookings, int size) {
+    FILE* fptr = fopen("booking.txt", "w");
+    if (fptr == NULL) {
+        printf("Error opening file booking.txt\n");
+        return;
+    }
+
+    for (int i = 0; i < size; i++) {
+        fprintf(fptr, "%d %d %s %s %s %s %.2f\n",
+            bookings[i].PNR,
+            bookings[i].tripNumber,
+            bookings[i].DepartureTime,
+            bookings[i].ArrivalTime,
+            bookings[i].Date,
+            bookings[i].Destination,
+            bookings[i].Price);
+    }
+
+    fclose(fptr);
+    printf("booking.txt file has been updated.\n");
+}
